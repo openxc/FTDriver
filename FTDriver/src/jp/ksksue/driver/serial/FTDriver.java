@@ -175,7 +175,7 @@ public class FTDriver {
 
             getPermission(device);
             if (!mManager.hasPermission(device)) {
-                return false;
+                continue;
             }
 
             // TODO: support any connections(current version find a first
@@ -984,5 +984,9 @@ public class FTDriver {
             Log.d(TAG, "USB interface removed");
             setUSBInterface(null, null, 0);
         }
+    }
+    
+    public UsbDevice getDevice() {
+    	return mDevice;
     }
 }
