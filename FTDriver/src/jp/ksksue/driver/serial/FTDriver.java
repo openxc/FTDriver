@@ -20,6 +20,7 @@ import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbConstants;
 import android.util.Log;
+import android.widget.Toast;
 
 enum FTDICHIPTYPE {
     FT232RL, FT2232C, FT232H, FT2232D, FT2232HL, FT4232HL, FT230X, CDC, NONE;
@@ -172,7 +173,7 @@ public class FTDriver {
     public boolean begin(int baudrate) {
         for (UsbDevice device : mManager.getDeviceList().values()) {
             Log.i(TAG, "Devices : " + device.toString());
-
+            
             getPermission(device);
             if (!mManager.hasPermission(device)) {
                 continue;
@@ -836,32 +837,32 @@ public class FTDriver {
             UsbDeviceConnection connection = mManager.openDevice(device);
             if (connection != null) {
                 Log.d(TAG, "open succeeded");
-                // if (connection.claimInterface(intf, false)) {
-                Log.d(TAG, "claim interface succeeded");
-
-                // TODO: support any connections(current version find a first
-                // device)
-                for (UsbId usbids : IDS) {
-                    if(device.getVendorId() == IGNORE_IDS.mVid ) {
-                        break;
-                    }
-                    // TODO: Refactor it for CDC
-                    if ((usbids.mVid == 0 && usbids.mPid == 0 && device
-                            .getDeviceClass() == UsbConstants.USB_CLASS_COMM) // CDC
-                            || (device.getVendorId() == usbids.mVid && device
-                                    .getProductId() == usbids.mPid)) {
-                        Log.d(TAG, "Vendor ID : " + device.getVendorId());
-                        Log.d(TAG, "Product ID : " + device.getProductId());
-                        mDevice = device;
-                        mDeviceConnection = connection;
-                        mInterface[intfNum] = intf;
-                        return true;
-                    }
+                if (connection.claimInterface(intf, false)) {
+	                Log.d(TAG, "claim interface succeeded");
+	
+	                // TODO: support any connections(current version find a first
+	                // device)
+	                for (UsbId usbids : IDS) {
+	                    if(device.getVendorId() == IGNORE_IDS.mVid ) {
+	                        break;
+	                    }
+	                    // TODO: Refactor it for CDC
+	                    if ((usbids.mVid == 0 && usbids.mPid == 0 && device
+	                            .getDeviceClass() == UsbConstants.USB_CLASS_COMM) // CDC
+	                            || (device.getVendorId() == usbids.mVid && device
+	                                    .getProductId() == usbids.mPid)) {
+	                        Log.d(TAG, "Vendor ID : " + device.getVendorId());
+	                        Log.d(TAG, "Product ID : " + device.getProductId());
+	                        mDevice = device;
+	                        mDeviceConnection = connection;
+	                        mInterface[intfNum] = intf;
+	                        return true;
+	                    }
+                } 
+                } else {
+                	Log.d(TAG,"claim interface failed");
+                	connection.close();
                 }
-                // } else {
-                // Log.d(TAG,"claim interface failed");
-                // connection.close();
-                // }
             } else {
                 Log.d(TAG, "open failed");
             }
