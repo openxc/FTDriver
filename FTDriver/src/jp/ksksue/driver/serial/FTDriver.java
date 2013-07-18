@@ -985,4 +985,8 @@ public class FTDriver {
             setUSBInterface(null, null, 0);
         }
     }
+    
+    public UsbDevice getDevice() {
+        return mDevice;
+       }
 }
