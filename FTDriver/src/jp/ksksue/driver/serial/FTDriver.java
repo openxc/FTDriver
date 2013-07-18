@@ -373,6 +373,16 @@ public class FTDriver {
         return ofst;
     }
 
+    /** 
+     * Writes a Complete String
+     * 
+     * @param str : outgoing string
+     * @return written length
+     */
+    public int write(String str) {
+        return write(str.getBytes());
+    }
+    
     /**
      * Writes 1byte Binary Data
      * 
@@ -388,7 +398,7 @@ public class FTDriver {
      * 
      * @param buf : write buffer
      * @param length : write length
-     * @return wrriten length
+     * @return written length
      */
     public int write(byte[] buf, int length) {
         return write(buf, length, 0);
