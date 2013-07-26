@@ -1025,10 +1025,6 @@ public class FTDriver {
         }
     }
     
-    public UsbDevice getDevice() {
-    	return mDevice;
-    }
-
     private String toHexStr(int val) {
         return String.format("0x%04x", val);
     }
