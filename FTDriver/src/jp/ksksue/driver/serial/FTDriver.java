@@ -64,6 +64,7 @@ public class FTDriver {
             // @hyokota555
             new UsbId(0x0584, 0xB02F, 4, 1, FTDICHIPTYPE.FT232RL), // REX-USB60MI
             new UsbId(0x0000, 0x0000, 0, 1, FTDICHIPTYPE.CDC), // CDC
+            new UsbId(0x2341, 0x0043, 0, 1, FTDICHIPTYPE.CDC), // Arduino Uno
     };
     
     private static final UsbId IGNORE_IDS = new UsbId(0x1519, 0x0000, 0, 1, FTDICHIPTYPE.NONE);
@@ -173,7 +174,6 @@ public class FTDriver {
     public boolean begin(int baudrate) {
         for (UsbDevice device : mManager.getDeviceList().values()) {
             Log.i(TAG, "Devices : " + device.toString());
-            
             getPermission(device);
             if (!mManager.hasPermission(device)) {
                 continue;
@@ -182,15 +182,18 @@ public class FTDriver {
             // TODO: support any connections(current version find a first
             // device)
             if (getUsbInterfaces(device)) {
+            	Log.i(TAG, "Succeeded in getUsbInterfaces"); 
                 break;
             }
         }
 
         if (mSelectedDeviceInfo == null) {
+        	Log.i(TAG, "mSelectedDeviceInfo is null"); 
             return false;
         }
 
         if (mDevice == null) {
+        	Log.i(TAG, "mDevice is null"); 
             return false;
         }
 
@@ -227,8 +230,10 @@ public class FTDriver {
 
     // Close the device
     public void end() {
+    	Log.d(TAG, "executing end()"); 
         if (mSelectedDeviceInfo != null) {
             if (isCDC) {
+            	Log.d(TAG, "isCDC"); 
                 if (mDeviceConnection != null) {
                     if (mInterface[0] != null) {
                         mDeviceConnection.releaseInterface(mInterface[0]);
@@ -244,7 +249,11 @@ public class FTDriver {
                 mDevice = null;
                 mDeviceConnection = null;
             } else {
+            	Log.d(TAG, "is not CDC"); 
                 for (int i = 0; i < mSelectedDeviceInfo.mNumOfChannels; ++i) {
+                	if(mInterface[i] != null){
+                		mDeviceConnection.releaseInterface(mInterface[i]); 
+                	}
                     setUSBInterface(null, null, i);
                 }
             }
@@ -831,89 +840,96 @@ public class FTDriver {
     }
 
     // Sets the current USB device and interface
-    private boolean setUSBInterface(UsbDevice device, UsbInterface intf,
-            int intfNum) {
-        if (mDeviceConnection != null) {
-            if (mInterface[intfNum] != null) {
-                mDeviceConnection.releaseInterface(mInterface[intfNum]);
-                mInterface[intfNum] = null;
-            }
-            mDeviceConnection.close();
-            mDevice = null;
-            mDeviceConnection = null;
+private boolean setUSBInterface(UsbDevice device, UsbInterface intf,
+        int intfNum) {
+    if (mDeviceConnection != null) {
+        if (mInterface[intfNum] != null) {
+            mDeviceConnection.releaseInterface(mInterface[intfNum]);
+	    Log.w(TAG, "releasing Interface"); 
+            mInterface[intfNum] = null;
         }
-
-        if (device != null && intf != null) {
-            UsbDeviceConnection connection = mManager.openDevice(device);
-            if (connection != null) {
-                Log.d(TAG, "open succeeded");
-                if (connection.claimInterface(intf, false)) {
-	                Log.d(TAG, "claim interface succeeded");
-	
-	                // TODO: support any connections(current version find a first
-	                // device)
-	                for (UsbId usbids : IDS) {
-	                    if(device.getVendorId() == IGNORE_IDS.mVid ) {
-	                        break;
-	                    }
-	                    // TODO: Refactor it for CDC
-	                    if ((usbids.mVid == 0 && usbids.mPid == 0 && device
-	                            .getDeviceClass() == UsbConstants.USB_CLASS_COMM) // CDC
-	                            || (device.getVendorId() == usbids.mVid && device
-	                                    .getProductId() == usbids.mPid)) {
-	                        Log.d(TAG, "Vendor ID : " + device.getVendorId());
-	                        Log.d(TAG, "Product ID : " + device.getProductId());
-	                        mDevice = device;
-	                        mDeviceConnection = connection;
-	                        mInterface[intfNum] = intf;
-	                        return true;
-	                    }
-                } 
-                } else {
-                	Log.d(TAG,"claim interface failed");
-                	connection.close();
-                }
-            } else {
-                Log.d(TAG, "open failed");
-            }
-        }
-
-        return false;
+        mDeviceConnection.close();
+        mDevice = null;
+        mDeviceConnection = null;
     }
+
+    if (device != null && intf != null) {
+        UsbDeviceConnection connection = mManager.openDevice(device);
+        if (connection != null) {
+            Log.d(TAG, "open succeeded");
+        if (connection.claimInterface(intf, false)) {
+        	//connection.claimInterface(intf, false);
+        	Log.d(TAG, "claim interface succeeded");
+            
+            // TODO: support any connections(current version find a first
+            // device)
+        for (UsbId usbids : IDS) {
+            if(device.getVendorId() == IGNORE_IDS.mVid ) {
+                break;
+            }
+                
+            // TODO: Refactor it for CDC
+            if ( (device.getDeviceClass() == UsbConstants.USB_CLASS_COMM) || (device.getVendorId() == usbids.mVid && device.getProductId() == usbids.mPid) ) {
+                Log.d(TAG, "Vendor ID : " + device.getVendorId());
+                Log.d(TAG, "Product ID : " + device.getProductId());
+                mDevice = device;
+                mDeviceConnection = connection;
+                mInterface[intfNum] = intf;
+                return true;
+            	}
+        }
+        }else{
+        	Log.d(TAG, "Failed to claim interface"); 
+       } 
+      }
+    }else {
+        Log.d(TAG, "open failed");
+    }
+Log.i(TAG, "setUSBInterface() returned false"); 
+    return false;
+}
 
     // find any interfaces and set mInterface
     private boolean getUsbInterfaces(UsbDevice device) {
+    	Log.i(TAG, "Called getUsbInterfaces"); 
         UsbInterface[] intf = new UsbInterface[FTDI_MAX_INTERFACE_NUM];
         for (UsbId usbids : IDS) {
             
             if(device.getVendorId() == IGNORE_IDS.mVid ) {
-                break;
+                Log.w(TAG, "Device is ignored"); 
+            	break;
             }
             
             // TODO: Refactor it for CDC
-            if (usbids.mVid == 0 && usbids.mPid == 0
-                    && device.getDeviceClass() == UsbConstants.USB_CLASS_COMM) {
+            if (device.getDeviceClass() == UsbConstants.USB_CLASS_COMM) {
+            	Log.w(TAG, "Device is USB_CLASS_COMM"); 
                 for (int i = 0; i < device.getInterfaceCount(); ++i) {
                     if (device.getInterface(i).getInterfaceClass() == UsbConstants.USB_CLASS_CDC_DATA) {
                         intf[0] = device.getInterface(i);
                     }
                 }
                 if (intf[0] == null) {
+                	Log.w(TAG, "Returning null, intf[0] empty"); 
                     return false;
                 }
             } else {
                 intf = findUSBInterfaceByVIDPID(device, usbids.mVid,
                         usbids.mPid);
+                Log.w(TAG, "Finding usb by VIDPID"); 
             }
             if (intf[0] != null) {
                 for (int i = 0; i < usbids.mNumOfChannels; ++i) {
-                    Log.d(TAG, "Found USB interface " + intf[i]);
-                    setUSBInterface(device, intf[i], i);
+                    Log.i(TAG, "Found USB interface " + intf[i]);
+                    boolean success = setUSBInterface(device, intf[i], i); 
                     mSelectedDeviceInfo = usbids;
+                    if (success){
+                    	Log.w(TAG, "Returning true."); 
+                        return true; 
+                    }
                 }
-                return true;
             }
         }
+        Log.w(TAG, "Returned false, unknown reason"); 
         return false;
     }
 
@@ -949,10 +965,9 @@ public class FTDriver {
      * @param pi
      * @see getPermission
      */
-    public void setPermissionIntent(PendingIntent pi) {
+    public void setPermissionIntent(PendingIntent pi) { 
         mPermissionIntent = pi;
     }
-
     /**
      * Gets an USB permission if no permission
      * 
@@ -960,9 +975,23 @@ public class FTDriver {
      * @see setPermissionIntent
      */
     public void getPermission(UsbDevice device) {
+    	Log.d(TAG, "Getting Permisssion"); 
+    	if(device == null){
+    		Log.d(TAG, "Device null"); 
+    	}
+    	if (mPermissionIntent == null){
+    		Log.d(TAG, "Permission Intent is null"); 
+    	}
+    	if(mManager.hasPermission(device)){
+    		Log.d(TAG, "Already has permission"); 
+    	}
         if (device != null && mPermissionIntent != null) {
             if (!mManager.hasPermission(device)) {
+            	Log.d(TAG, "Requesting Permission"); 
                 mManager.requestPermission(device, mPermissionIntent);
+                if(mManager.hasPermission(device)){
+                    Log.d(TAG, "Permission acheived"); 
+                }
             }
         }
     }
