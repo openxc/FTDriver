@@ -268,10 +268,12 @@ public class FTDriver {
     public int read(byte[] buf, int channel) {
 
         if (isCDC) {
+        	Log.d(TAG, "in read(), is CDC is true"); 
             int len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[channel],
-                    buf, buf.length, 100); // RX
+                    buf, buf.length, 10000); // RX
             if (len < 0) {
                 len = 0;
+                Log.d(TAG, "length is negative, and being set to zero. "); 
             }
             return len;
         }
