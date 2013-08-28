@@ -12,6 +12,8 @@ package jp.ksksue.driver.serial;
  * 
  */
 
+import java.nio.BufferUnderflowException;
+
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.hardware.usb.UsbDevice;
@@ -21,7 +23,6 @@ import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbConstants;
 import android.util.Log;
-import android.widget.Toast;
 
 enum FTDICHIPTYPE {
     FT232RL, FT2232C, FT232H, FT2232D, FT2232HL, FT4232HL, FT230X, CDC, NONE;
@@ -43,7 +44,7 @@ class UsbId {
     }
 }
 
-public class FTDriver {
+public class FTDriver implements Runnable {
 
     private static final boolean LOCAL_LOGV = true;
 
@@ -158,6 +159,9 @@ public class FTDriver {
     private boolean updateReadCount = false;
 
     private boolean isCDC = false;
+    private volatile boolean mBackgroundReading = false;
+    private volatile byte mIncomingBuffer[] = new byte[1024];
+    private volatile int mBufferSize = 0;
 
     public FTDriver(UsbManager manager) {
         mManager = manager;
@@ -173,6 +177,9 @@ public class FTDriver {
 
     // Open an FTDI USB Device
     public boolean begin(int baudrate) {
+        if (mBackgroundReading)
+            mBackgroundReading = false;  //Kill the background reader if it exists.
+        
         for (UsbDevice device : mManager.getDeviceList().values()) {
             Log.i(TAG, "Devices : " + device.toString());
             
@@ -223,12 +230,18 @@ public class FTDriver {
         }
 
         Log.i(TAG, "Device Serial : " + mDeviceConnection.getSerial());
+        
+        if (isCDC) {
+            mBackgroundReading = true;
+            new Thread(this).start();
+        }
 
         return true;
     }
 
     // Close the device
     public void end() {
+        mBackgroundReading = false;
         if (mSelectedDeviceInfo != null) {
             if (isCDC) {
                 if (mDeviceConnection != null) {
@@ -261,12 +274,15 @@ public class FTDriver {
     public int read(byte[] buf, int channel) {
 
         if (isCDC) {
-            int len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[channel],
-                    buf, buf.length, 100); // RX
-            if (len < 0) {
-                len = 0;
+            synchronized( this ) {
+                int byteNumber = 0;
+                while(( byteNumber < mBufferSize ) && (byteNumber < buf.length)) {
+                        buf[byteNumber] = mIncomingBuffer[byteNumber];
+                        byteNumber++;
+                } 
+                mBufferSize = 0;
+                return byteNumber;
             }
-            return len;
         }
 
         if (channel >= mSelectedDeviceInfo.mNumOfChannels) {
@@ -1017,6 +1033,7 @@ public class FTDriver {
 
     // when remove the device USB plug from a USB port
     public void usbDetached(Intent intent) {
+        mBackgroundReading = false;
         UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
         String deviceName = device.getDeviceName();
         if (mDevice != null && mDevice.equals(deviceName)) {
@@ -1027,5 +1044,22 @@ public class FTDriver {
     
     private String toHexStr(int val) {
         return String.format("0x%04x", val);
+    }
+
+    @Override
+    public void run() {
+        byte buf[] = new byte[512];
+        while (mBackgroundReading) {
+            int len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[0],
+                    buf, buf.length, 100); // RX
+            if (len >  0) {
+                synchronized( this ) {
+                    for(int byteNumber=0; byteNumber<len; byteNumber++) {
+                        mIncomingBuffer[mBufferSize] = buf[byteNumber];
+                        mBufferSize++;
+                    }
+                }
+            }
+        }
     }
 }
