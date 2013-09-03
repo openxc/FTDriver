@@ -22,6 +22,7 @@ import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbConstants;
+import android.os.Handler;
 import android.util.Log;
 
 enum FTDICHIPTYPE {
@@ -162,6 +163,8 @@ public class FTDriver implements Runnable {
     private volatile boolean mBackgroundReading = false;
     private volatile byte mIncomingBuffer[] = new byte[1024];
     private volatile int mBufferSize = 0;
+    private volatile int mReadDelay = 100;  //In milliseconds.
+    private Handler mHandler = new Handler();
 
     public FTDriver(UsbManager manager) {
         mManager = manager;
@@ -1049,7 +1052,8 @@ public class FTDriver implements Runnable {
     @Override
     public void run() {
         byte buf[] = new byte[512];
-        while (mBackgroundReading) {
+        if (mBackgroundReading) {
+            mHandler.postDelayed(this, mReadDelay);
             int len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[0],
                     buf, buf.length, 100); // RX
             if (len >  0) {
@@ -1061,5 +1065,9 @@ public class FTDriver implements Runnable {
                 }
             }
         }
+    }
+    
+    public void setReadFreq(int newFreq) {
+        mReadDelay = newFreq;
     }
 }
