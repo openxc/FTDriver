@@ -165,6 +165,8 @@ public class FTDriver implements Runnable {
     private volatile int mBufferSize = 0;
     private volatile int mReadDelay = 100;  //In milliseconds.
     private Handler mHandler = new Handler();
+    private Object mBufferLock = new Object();
+    private Object mConnectionLock = new Object();
 
     public FTDriver(UsbManager manager) {
         mManager = manager;
@@ -277,7 +279,7 @@ public class FTDriver implements Runnable {
     public int read(byte[] buf, int channel) {
 
         if (isCDC) {
-            synchronized( this ) {
+            synchronized( mBufferLock ) {
                 int byteNumber = 0;
                 while(( byteNumber < mBufferSize ) && (byteNumber < buf.length)) {
                         buf[byteNumber] = mIncomingBuffer[byteNumber];
@@ -1036,10 +1038,10 @@ public class FTDriver implements Runnable {
 
     // when remove the device USB plug from a USB port
     public void usbDetached(Intent intent) {
-        mBackgroundReading = false;
         UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
         String deviceName = device.getDeviceName();
         if (mDevice != null && mDevice.equals(deviceName)) {
+            mBackgroundReading = false;
             Log.d(TAG, "USB interface removed");
             setUSBInterface(null, null, 0);
         }
@@ -1054,10 +1056,13 @@ public class FTDriver implements Runnable {
         byte buf[] = new byte[512];
         if (mBackgroundReading) {
             mHandler.postDelayed(this, mReadDelay);
-            int len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[0],
-                    buf, buf.length, 100); // RX
+            int len = 0;
+            synchronized( mConnectionLock ) {
+                len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[0],
+                        buf, buf.length, 100); // RX
+            }
             if (len >  0) {
-                synchronized( this ) {
+                synchronized( mBufferLock ) {
                     for(int byteNumber=0; byteNumber<len; byteNumber++) {
                         mIncomingBuffer[mBufferSize] = buf[byteNumber];
                         mBufferSize++;
