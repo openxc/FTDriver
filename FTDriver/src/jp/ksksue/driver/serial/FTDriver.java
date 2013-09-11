@@ -161,9 +161,9 @@ public class FTDriver implements Runnable {
 
     private boolean isCDC = false;
     private volatile boolean mBackgroundReading = false;
-    private volatile byte mIncomingBuffer[] = new byte[1024];
+    private volatile byte mIncomingBuffer[] = new byte[READBUF_SIZE];
     private volatile int mBufferSize = 0;
-    private volatile int mReadDelay = 100;  //In milliseconds.
+    private volatile int mReadDelay = 50;  //In milliseconds.
     private Handler mHandler = new Handler();
     private Object mBufferLock = new Object();
     private Object mConnectionLock = new Object();
@@ -181,7 +181,7 @@ public class FTDriver implements Runnable {
     }
 
     // Open an FTDI USB Device
-    public boolean begin(int baudrate) {
+    public synchronized boolean begin(int baudrate) {
         if (mBackgroundReading)
             mBackgroundReading = false;  //Kill the background reader if it exists.
         
@@ -245,7 +245,7 @@ public class FTDriver implements Runnable {
     }
 
     // Close the device
-    public void end() {
+    public synchronized void end() {
         mBackgroundReading = false;
         if (mSelectedDeviceInfo != null) {
             if (isCDC) {
@@ -276,18 +276,16 @@ public class FTDriver implements Runnable {
         return read(buf, 0);
     }
 
-    public int read(byte[] buf, int channel) {
+    public synchronized int read(byte[] buf, int channel) {
 
         if (isCDC) {
-            synchronized( mBufferLock ) {
-                int byteNumber = 0;
-                while(( byteNumber < mBufferSize ) && (byteNumber < buf.length)) {
-                        buf[byteNumber] = mIncomingBuffer[byteNumber];
-                        byteNumber++;
-                } 
-                mBufferSize = 0;
-                return byteNumber;
-            }
+            int byteNumber = 0;
+            while(( byteNumber < mBufferSize ) && (byteNumber < buf.length)) {
+                buf[byteNumber] = mIncomingBuffer[byteNumber];
+                byteNumber++;
+            } 
+            mBufferSize = 0;
+            return byteNumber;
         }
 
         if (channel >= mSelectedDeviceInfo.mNumOfChannels) {
@@ -435,7 +433,7 @@ public class FTDriver implements Runnable {
      * @param channel : write channel
      * @return written length
      */
-    public int write(byte[] buf, int length, int channel) {
+    public synchronized int write(byte[] buf, int length, int channel) {
         if (channel >= mSelectedDeviceInfo.mNumOfChannels) {
             return -1;
         }
@@ -475,7 +473,7 @@ public class FTDriver implements Runnable {
         }
     }
 
-    public byte getPinState() {
+    public synchronized byte getPinState() {
         int index = 0;
         byte[] buffer;
         buffer = new byte[1];
@@ -487,7 +485,7 @@ public class FTDriver implements Runnable {
         return buffer[0];
     }
 
-    public String getSerialNumber() {
+    public synchronized String getSerialNumber() {
         if(mDeviceConnection == null) {
             return "";
         } else {
@@ -495,7 +493,7 @@ public class FTDriver implements Runnable {
         }
     }
 
-    public boolean setBitmode(boolean enable, int bitmask, int mode) {
+    public synchronized boolean setBitmode(boolean enable, int bitmask, int mode) {
         short val = 0;
         int result;
         boolean ret = false;
@@ -523,7 +521,7 @@ public class FTDriver implements Runnable {
         return ret;
     }
 
-    private void setCdcBaudrate(int baudrate) {
+    private synchronized void setCdcBaudrate(int baudrate) {
         byte[] baudByte = new byte[4];
 
         baudByte[0] = (byte) (baudrate & 0x000000FF);
@@ -536,7 +534,7 @@ public class FTDriver implements Runnable {
         }, 7, 0);
     }
 
-    public boolean setBaudrate(int baudrate, int channel) {
+    public synchronized boolean setBaudrate(int baudrate, int channel) {
         if (mDeviceConnection == null) {
             return false;
         }
@@ -620,7 +618,7 @@ public class FTDriver implements Runnable {
      *            FTDI_SET_FLOW_DTR_DSR_HS FTDI_SET_FLOW_XON_XOFF_HS
      * @return true : succeed, false : not succeed
      */
-    public boolean setFlowControl(int channel, int flowControl) {
+    public synchronized boolean setFlowControl(int channel, int flowControl) {
         if (mDeviceConnection == null) {
             return false;
         }
@@ -664,7 +662,7 @@ public class FTDriver implements Runnable {
      * @param channel CH_A CH_B CH_C CH_D
      * @return true : succeed, false : not succeed
      */
-    public boolean setSerialPropertyToChip(int channel) {
+    public synchronized boolean setSerialPropertyToChip(int channel) {
         // TODO : test this method
         if (mDeviceConnection == null) {
             return false;
@@ -876,7 +874,7 @@ public class FTDriver implements Runnable {
     }
 
     // Sets the current USB device and interface
-    private boolean setUSBInterface(UsbDevice device, UsbInterface intf,
+    private synchronized boolean setUSBInterface(UsbDevice device, UsbInterface intf,
             int intfNum) {
         if (mDeviceConnection != null) {
             if (mInterface[intfNum] != null) {
@@ -1052,21 +1050,17 @@ public class FTDriver implements Runnable {
     }
 
     @Override
-    public void run() {
-        byte buf[] = new byte[512];
+    public synchronized void run() {
         if (mBackgroundReading) {
             mHandler.postDelayed(this, mReadDelay);
             int len = 0;
-            synchronized( mConnectionLock ) {
-                len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[0],
+            byte buf[] = new byte[512];
+            len = mDeviceConnection.bulkTransfer(mFTDIEndpointIN[0],
                         buf, buf.length, 100); // RX
-            }
             if (len >  0) {
-                synchronized( mBufferLock ) {
-                    for(int byteNumber=0; byteNumber<len; byteNumber++) {
-                        mIncomingBuffer[mBufferSize] = buf[byteNumber];
-                        mBufferSize++;
-                    }
+                for(int byteNumber=0; byteNumber<len; byteNumber++) {
+                    mIncomingBuffer[mBufferSize] = buf[byteNumber];
+                    mBufferSize++;
                 }
             }
         }
